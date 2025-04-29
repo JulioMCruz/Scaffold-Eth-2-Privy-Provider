@@ -6,12 +6,15 @@ import { Balance } from "../Balance";
 import { AddressInfoDropdown } from "./AddressInfoDropdown";
 import { AddressQRCodeModal } from "./AddressQRCodeModal";
 import { WrongNetworkDropdown } from "./WrongNetworkDropdown";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 // import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Address } from "viem";
 import { useNetworkColor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 import { getBlockExplorerAddressLink } from "~~/utils/scaffold-eth";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+
+/* eslint-disable prettier/prettier */
+
 /**
  * Custom Wagmi Connect Button (watch balance + custom design)
  */
@@ -24,23 +27,23 @@ export const RainbowKitCustomConnectButton = () => {
   const activeWallet = wallets?.[0];
 
   const getChainNumber = (chainId: string | undefined): number => {
-    if (!chainId) return 0
+    if (!chainId) return 0;
     return Number(chainId.split(":")[1]);
-  }
+  };
 
   const isWrongNetwork = getChainNumber(activeWallet?.chainId) !== targetNetwork.id;
 
   function getChainName(chainId: number): string {
-    if (!chainId) return "Unknown Network"
-    
+    if (!chainId) return "Unknown Network";
+
     const chainNames: Record<number, string> = {
       31337: "Hardhat",
       11155111: "Sepolia",
       84532: "Base Sepolia",
       8453: "Base",
-    }
-    
-    return chainNames[chainId] || "Unknown Network"
+    };
+
+    return chainNames[chainId] || "Unknown Network";
   }
 
   return (
@@ -76,10 +79,7 @@ export const RainbowKitCustomConnectButton = () => {
           </button> */}
         </>
       ) : (
-        <button 
-          className="btn btn-primary btn-sm"
-          onClick={() => login({ loginMethods: ["wallet"] })}
-        >
+        <button className="btn btn-primary btn-sm" onClick={() => login({ loginMethods: ["wallet", "email"] })}>
           Connect Wallet
         </button>
       )}
