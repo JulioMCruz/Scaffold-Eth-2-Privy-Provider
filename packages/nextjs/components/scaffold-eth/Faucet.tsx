@@ -55,7 +55,7 @@ export const Faucet = () => {
   }, []);
 
   const sendETH = async () => {
-    if (!faucetAddress || !inputAddress) {
+    if (!faucetAddress || !inputAddress || !sendValue) {
       return;
     }
     try {
@@ -74,7 +74,6 @@ export const Faucet = () => {
     }
   };
 
-  // Render only on local chain
   if (ConnectedChain?.id !== hardhat.id) {
     return null;
   }
@@ -88,7 +87,6 @@ export const Faucet = () => {
       <input type="checkbox" id="faucet-modal" className="modal-toggle" />
       <label htmlFor="faucet-modal" className="modal cursor-pointer">
         <label className="modal-box relative">
-          {/* dummy input to capture event onclick on modal box */}
           <input className="h-0 w-0 absolute top-0 left-0" />
           <h3 className="text-xl font-bold mb-3">Local Faucet</h3>
           <label htmlFor="faucet-modal" className="btn btn-ghost btn-sm btn-circle absolute right-3 top-3">
@@ -98,11 +96,11 @@ export const Faucet = () => {
             <div className="flex space-x-4">
               <div>
                 <span className="text-sm font-bold">From:</span>
-                <Address address={faucetAddress} onlyEnsOrAddress />
+                <Address address={faucetAddress} />
               </div>
               <div>
                 <span className="text-sm font-bold pl-3">Available:</span>
-                <Balance address={faucetAddress} />
+                <Balance address={faucetAddress} className="text-base" />
               </div>
             </div>
             <div className="flex flex-col space-y-3">
@@ -112,7 +110,11 @@ export const Faucet = () => {
                 onChange={value => setInputAddress(value as AddressType)}
               />
               <EtherInput placeholder="Amount to send" value={sendValue} onChange={value => setSendValue(value)} />
-              <button className="h-10 btn btn-primary btn-sm px-2 rounded-full" onClick={sendETH} disabled={loading}>
+              <button
+                className="h-10 btn btn-primary btn-sm px-2 rounded-full"
+                onClick={sendETH}
+                disabled={loading || !inputAddress || !sendValue || !faucetAddress}
+              >
                 {!loading ? (
                   <BanknotesIcon className="h-6 w-6" />
                 ) : (

@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePrivy } from "@privy-io/react-auth";
 import type { NextPage } from "next";
-import { useAccount } from "wagmi";
+import { Address } from "viem";
 import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { Address } from "~~/components/scaffold-eth";
+import { Address as AddressComponent } from "~~/components/scaffold-eth";
 
 const Home: NextPage = () => {
-  const { address: connectedAddress } = useAccount();
+  const { user } = usePrivy();
+  const connectedAddress = user?.wallet?.address as Address | undefined;
 
   return (
     <>
@@ -19,7 +21,7 @@ const Home: NextPage = () => {
           </h1>
           <div className="flex justify-center items-center space-x-2 flex-col sm:flex-row">
             <p className="my-2 font-medium">Connected Address:</p>
-            <Address address={connectedAddress} />
+            <AddressComponent address={connectedAddress} />
           </div>
 
           <p className="text-center text-lg">

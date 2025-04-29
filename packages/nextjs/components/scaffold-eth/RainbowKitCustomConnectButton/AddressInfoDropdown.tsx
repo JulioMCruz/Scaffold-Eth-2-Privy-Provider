@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { NetworkOptions } from "./NetworkOptions";
+import { usePrivy } from "@privy-io/react-auth";
 import CopyToClipboard from "react-copy-to-clipboard";
 import { getAddress } from "viem";
 import { Address } from "viem";
@@ -13,7 +14,7 @@ import {
   DocumentDuplicateIcon,
   QrCodeIcon,
 } from "@heroicons/react/24/outline";
-import { BlockieAvatar, isENS } from "~~/components/scaffold-eth";
+import { Address as AddressDisplay, BlockieAvatar } from "~~/components/scaffold-eth";
 import { useOutsideClick } from "~~/hooks/scaffold-eth";
 import { getTargetNetworks } from "~~/utils/scaffold-eth";
 
@@ -26,14 +27,10 @@ type AddressInfoDropdownProps = {
   ensAvatar?: string;
 };
 
-export const AddressInfoDropdown = ({
-  address,
-  ensAvatar,
-  displayName,
-  blockExplorerAddressLink,
-}: AddressInfoDropdownProps) => {
+export const AddressInfoDropdown = ({ address, ensAvatar, blockExplorerAddressLink }: AddressInfoDropdownProps) => {
   const { disconnect } = useDisconnect();
-  const checkSumAddress = getAddress(address);
+  const { logout } = usePrivy();
+  const checkSumAddress = address ? getAddress(address) : undefined;
 
   const [addressCopied, setAddressCopied] = useState(false);
 
@@ -49,10 +46,9 @@ export const AddressInfoDropdown = ({
     <>
       <details ref={dropdownRef} className="dropdown dropdown-end leading-3">
         <summary tabIndex={0} className="btn btn-secondary btn-sm pl-0 pr-2 shadow-md dropdown-toggle gap-0 !h-auto">
-          <BlockieAvatar address={checkSumAddress} size={30} ensImage={ensAvatar} />
-          <span className="ml-2 mr-1">
-            {isENS(displayName) ? displayName : checkSumAddress?.slice(0, 6) + "..." + checkSumAddress?.slice(-4)}
-          </span>
+          <div className="ml-2 mr-1">
+            <AddressDisplay address={checkSumAddress} format="short" size="sm" />
+          </div>
           <ChevronDownIcon className="h-6 w-4 ml-2 sm:ml-0" />
         </summary>
         <ul
@@ -125,7 +121,10 @@ export const AddressInfoDropdown = ({
             <button
               className="menu-item text-error btn-sm !rounded-xl flex gap-3 py-3"
               type="button"
-              onClick={() => disconnect()}
+              onClick={() => {
+                disconnect();
+                logout();
+              }}
             >
               <ArrowLeftOnRectangleIcon className="h-6 w-4 ml-2 sm:ml-0" /> <span>Disconnect</span>
             </button>
