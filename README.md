@@ -7,13 +7,14 @@
 
 🧪 An open-source, up-to-date toolkit for building decentralized applications (dapps) on the Ethereum blockchain. It's designed to make it easier for developers to create and deploy smart contracts and build user interfaces that interact with those contracts.
 
-⚙️ Built using NextJS, RainbowKit, Hardhat, Wagmi, Viem, and Typescript.
+⚙️ Built using NextJS, **Privy**, RainbowKit, Hardhat, Wagmi, Viem, and Typescript.
 
-- ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
-- 🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
-- 🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
-- 🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet.
-- 🔐 **Integration with Wallet Providers**: Connect to different wallet providers and interact with the Ethereum network.
+-   ✅ **Contract Hot Reload**: Your frontend auto-adapts to your smart contract as you edit it.
+-   🔐 **[Privy Authentication](https://docs.privy.io/)**: Integrated user authentication (email, social, wallet) via Privy.
+-   🪝 **[Custom hooks](https://docs.scaffoldeth.io/hooks/)**: Collection of React hooks wrapper around [wagmi](https://wagmi.sh/) to simplify interactions with smart contracts with typescript autocompletion.
+-   🧱 [**Components**](https://docs.scaffoldeth.io/components/): Collection of common web3 components to quickly build your frontend.
+-   🔥 **Burner Wallet & Local Faucet**: Quickly test your application with a burner wallet and local faucet (via RainbowKit/Wagmi).
+-   🔐 **Integration with Wallet Providers**: Connect to different wallet providers (managed via Privy) and interact with the Ethereum network.
 
 ![Debug Contracts tab](https://github.com/scaffold-eth/scaffold-eth-2/assets/55535804/b237af0c-5027-4849-a5c1-2e31495cccb1)
 
@@ -21,57 +22,123 @@
 
 Before you begin, you need to install the following tools:
 
-- [Node (>= v18.18)](https://nodejs.org/en/download/)
-- Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
-- [Git](https://git-scm.com/downloads)
+-   [Node (>= v18.18)](https://nodejs.org/en/download/)
+-   Yarn ([v1](https://classic.yarnpkg.com/en/docs/install/) or [v2+](https://yarnpkg.com/getting-started/install))
+-   [Git](https://git-scm.com/downloads)
 
 ## Quickstart
 
-To get started with Scaffold-ETH 2, follow the steps below:
+To get started with Scaffold-ETH 2 + Privy, follow the steps below:
 
-1. Install dependencies if it was skipped in CLI:
+1. Clone the repository and install dependencies:
 
-```
-cd my-dapp-example
+```bash
+git clone <your-repo-url> my-privy-app
+cd my-privy-app
 yarn install
 ```
 
-2. Run a local network in the first terminal:
+2. Set up environment variables. Copy the example file and add your Privy App ID:
 
+```bash
+cp packages/nextjs/.env.example packages/nextjs/.env.local
 ```
+
+Then, edit `packages/nextjs/.env.local` and set your `NEXT_PUBLIC_PRIVY_APP_ID`:
+
+```env
+NEXT_PUBLIC_PRIVY_APP_ID=YOUR_PRIVY_APP_ID # Get yours from https://dashboard.privy.io/
+```
+
+_(Optional)_ Add your Alchemy API Key and WalletConnect Project ID if needed for broader network support or specific features.
+
+3. Run a local network in the first terminal:
+
+```bash
 yarn chain
 ```
 
-This command starts a local Ethereum network using Hardhat. The network runs on your local machine and can be used for testing and development. You can customize the network configuration in `packages/hardhat/hardhat.config.ts`.
+This command starts a local Ethereum network using Hardhat.
 
-3. On a second terminal, deploy the test contract:
+4. On a second terminal, deploy the test contract:
 
-```
+```bash
 yarn deploy
 ```
 
-This command deploys a test smart contract to the local network. The contract is located in `packages/hardhat/contracts` and can be modified to suit your needs. The `yarn deploy` command uses the deploy script located in `packages/hardhat/deploy` to deploy the contract to the network. You can also customize the deploy script.
+This command deploys the example smart contract to the local network.
 
-4. On a third terminal, start your NextJS app:
+5. On a third terminal, start your NextJS app:
 
-```
+```bash
 yarn start
 ```
 
-Visit your app on: `http://localhost:3000`. You can interact with your smart contract using the `Debug Contracts` page. You can tweak the app config in `packages/nextjs/scaffold.config.ts`.
+Visit your app on: `http://localhost:3000`. You can connect using Privy (wallet, email, etc.) and interact with your smart contract using the `Debug Contracts` page.
 
-Run smart contract test with `yarn hardhat:test`
+**Note on Interacting with Contracts (Write Operations):**
 
-- Edit your smart contracts in `packages/hardhat/contracts`
-- Edit your frontend homepage at `packages/nextjs/app/page.tsx`. For guidance on [routing](https://nextjs.org/docs/app/building-your-application/routing/defining-routes) and configuring [pages/layouts](https://nextjs.org/docs/app/building-your-application/routing/pages-and-layouts) checkout the Next.js documentation.
-- Edit your deployment scripts in `packages/hardhat/deploy`
+This Scaffold-ETH 2 setup uses Privy for user authentication and wallet management. While Privy provides integration utilities for Wagmi (`@privy-io/wagmi`), we've observed potential synchronization issues where the state managed by Privy (e.g., the connected account and chain) might not be correctly reflected in standard Wagmi hooks like `useAccount` and `useWriteContract` in all environments or versions.
 
+Consequently, relying solely on Wagmi's `useWriteContract` or related Scaffold-ETH hooks (`useScaffoldWriteContract`, `useTransactor`) for sending transactions can lead to errors (like "cannot access account" or disabled buttons) because the underlying Wagmi context might think the user is disconnected.
+
+To ensure reliable contract write operations, this template uses a manual approach within components that need to send transactions (demonstrated in `/packages/nextjs/app/debug/_components/contract/WriteOnlyFunctionForm.tsx`). Here's a breakdown of the steps involved:
+
+1.  **Get Privy Wallet:** Obtain the `activeWallet` object from Privy's `useWallets` hook.
+2.  **Get Provider:** Access the underlying EIP-1193 provider using `await activeWallet.getEthereumProvider();`.
+3.  **Create Viem Wallet Client:** Instantiate a Viem `WalletClient` configured with the Privy provider:
+    ```typescript
+    import { createWalletClient, custom } from "viem";
+    // ... inside your component async function ...
+    const provider = await activeWallet.getEthereumProvider();
+    const walletClient = createWalletClient({
+        account: activeWallet.address,
+        transport: custom(provider),
+        chain: targetNetwork, // From useTargetNetwork()
+    });
+    ```
+4.  **Estimate Gas:** Use a Viem `PublicClient` to estimate the gas required for the transaction. This is crucial for embedded wallets which might not estimate automatically.
+    ```typescript
+    import { createPublicClient, http, encodeFunctionData } from 'viem';
+    // ...
+    const publicClient = createPublicClient({ chain: targetNetwork, transport: http() });
+    const encodedData = encodeFunctionData({ abi, functionName, args });
+    const estimatedGas = await publicClient.estimateGas({
+      account: walletClient.account,
+      to: contractAddress,
+      data: encodedData,
+      value: /* BigInt(value) or undefined */,
+    });
+    ```
+5.  **Prepare & Send Transaction:** Construct the transaction request object including the estimated gas and send it using the `walletClient`:
+    ```typescript
+    const transactionRequest = {
+      account: walletClient.account,
+      to: contractAddress,
+      data: encodedData,
+      value: /* BigInt(value) or undefined */,
+      gas: estimatedGas,
+    };
+    const txHash = await walletClient.sendTransaction(transactionRequest);
+    ```
+
+This manual flow ensures that the transaction is initiated directly through the provider managed by Privy, bypassing potential inconsistencies in the Wagmi context state.
+
+---
+
+Run smart contract tests with `yarn hardhat:test`
+
+-   Edit your smart contracts in `packages/hardhat/contracts`
+-   Edit your frontend homepage at `packages/nextjs/app/page.tsx`.
+-   Edit your deployment scripts in `packages/hardhat/deploy`
 
 ## Documentation
 
-Visit our [docs](https://docs.scaffoldeth.io) to learn how to start building with Scaffold-ETH 2.
+Visit the official [Scaffold-ETH 2 docs](https://docs.scaffoldeth.io) for more details on its core features (hooks, components, etc.).
 
-To know more about its features, check out our [website](https://scaffoldeth.io).
+Visit the [Privy docs](https://docs.privy.io) for more information on configuring authentication methods, embedded wallets, and other Privy features.
+
+To know more about the original Scaffold-ETH 2 features, check out the [website](https://scaffoldeth.io).
 
 ## Contributing to Scaffold-ETH 2
 
