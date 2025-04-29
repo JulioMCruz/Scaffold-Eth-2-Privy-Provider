@@ -18,13 +18,14 @@ const localWalletClient = createWalletClient({
 });
 
 /**
- * FaucetButton button which lets you grab eth.
+ * FaucetButton button which lets you grab eth for your primary Privy wallet.
  */
 export const FaucetButton = () => {
-  const { authenticated } = usePrivy();
+  const { authenticated, user } = usePrivy();
   const { wallets } = useWallets();
-  const activeWallet = wallets?.[0];
-  const address = activeWallet?.address;
+
+  const address = user?.wallet?.address;
+  const connectedChainId = wallets?.[0]?.chainId;
 
   const { data: balance } = useWatchBalance({ address });
   const [loading, setLoading] = useState(false);
@@ -36,14 +37,19 @@ export const FaucetButton = () => {
   };
 
   const sendETH = async () => {
-    if (!address) return;
+    console.log(`[FaucetButton] sendETH called. Target address from usePrivy().user.wallet: ${address}`);
+    if (!address) {
+      console.error("[FaucetButton] No address found from usePrivy().user.wallet, cannot send ETH.");
+      return;
+    }
     try {
       setLoading(true);
-      await faucetTxn({
+      const txResult = await faucetTxn({
         account: FAUCET_ADDRESS,
         to: address,
         value: parseEther(NUM_OF_ETH),
       });
+      console.log("[FaucetButton] Faucet Tx Sent:", txResult);
       setLoading(false);
     } catch (error) {
       console.error("⚡️ ~ file: FaucetButton.tsx:sendETH ~ error", error);
@@ -51,8 +57,7 @@ export const FaucetButton = () => {
     }
   };
 
-  // Render only on local chain
-  if (!authenticated || getChainNumber(activeWallet?.chainId) !== hardhat.id) {
+  if (!authenticated || getChainNumber(connectedChainId) !== hardhat.id) {
     return null;
   }
 
@@ -67,7 +72,7 @@ export const FaucetButton = () => {
       }
       data-tip="Grab funds from faucet"
     >
-      <button className="btn btn-secondary btn-sm px-2 rounded-full" onClick={sendETH} disabled={loading}>
+      <button className="btn btn-secondary btn-sm px-2 rounded-full" onClick={sendETH} disabled={loading || !address}>
         {!loading ? (
           <BanknotesIcon className="h-4 w-4" />
         ) : (
