@@ -76,53 +76,26 @@ yarn start
 
 Visit your app on: `http://localhost:3000`. You can connect using Privy (wallet, email, etc.) and interact with your smart contract using the `Debug Contracts` page.
 
-**Note on Interacting with Contracts (Write Operations):**
+**Note on Interacting with Contracts & Reading State:**
 
-This Scaffold-ETH 2 setup uses Privy for user authentication and wallet management. While Privy provides integration utilities for Wagmi (`@privy-io/wagmi`), we've observed potential synchronization issues where the state managed by Privy (e.g., the connected account and chain) might not be correctly reflected in standard Wagmi hooks like `useAccount` and `useWriteContract` in all environments or versions.
+This Scaffold-ETH 2 setup uses Privy for user authentication and wallet management. While Privy provides integration utilities for Wagmi (`@privy-io/wagmi`), we've observed potential synchronization issues where the state managed by Privy (e.g., the connected account and chain) might not be correctly reflected in standard Wagmi hooks in all environments or versions.
 
-Consequently, relying solely on Wagmi's `useWriteContract` or related Scaffold-ETH hooks (`useScaffoldWriteContract`, `useTransactor`) for sending transactions can lead to errors (like "cannot access account" or disabled buttons) because the underlying Wagmi context might think the user is disconnected.
+This affects **both writing and reading** state using Wagmi:
 
-To ensure reliable contract write operations, this template uses a manual approach within components that need to send transactions (demonstrated in `/packages/nextjs/app/debug/_components/contract/WriteOnlyFunctionForm.tsx`). Here's a breakdown of the steps involved:
+-   **Write Operations:** Relying solely on Wagmi's `useWriteContract` or related Scaffold-ETH hooks (`useScaffoldWriteContract`, `useTransactor`) can lead to errors (like "cannot access account" or disabled buttons). To ensure reliable contract write operations, this template uses a manual approach (demonstrated in `/packages/nextjs/app/debug/_components/contract/WriteOnlyFunctionForm.tsx`) involving creating a Viem `WalletClient` from the provider exposed by Privy's `activeWallet`.
 
-1.  **Get Privy Wallet:** Obtain the `activeWallet` object from Privy's `useWallets` hook.
-2.  **Get Provider:** Access the underlying EIP-1193 provider using `await activeWallet.getEthereumProvider();`.
-3.  **Create Viem Wallet Client:** Instantiate a Viem `WalletClient` configured with the Privy provider:
+-   **Reading State:** Similarly, using Wagmi's `useAccount` hook might not reliably return the connected address or chain information when the user is logged in via Privy. To reliably display user information like the connected wallet address, use Privy's own hooks:
     ```typescript
-    import { createWalletClient, custom } from "viem";
-    // ... inside your component async function ...
-    const provider = await activeWallet.getEthereumProvider();
-    const walletClient = createWalletClient({
-        account: activeWallet.address,
-        transport: custom(provider),
-        chain: targetNetwork, // From useTargetNetwork()
-    });
+    import { usePrivy } from "@privy-io/react-auth";
+    import { Address as AddressType } from "viem";
+    // ... inside your component ...
+    const { user } = usePrivy();
+    const connectedAddress = user?.wallet?.address as AddressType | undefined;
+    // Now use connectedAddress in your UI
     ```
-4.  **Estimate Gas:** Use a Viem `PublicClient` to estimate the gas required for the transaction. This is crucial for embedded wallets which might not estimate automatically.
-    ```typescript
-    import { createPublicClient, http, encodeFunctionData } from 'viem';
-    // ...
-    const publicClient = createPublicClient({ chain: targetNetwork, transport: http() });
-    const encodedData = encodeFunctionData({ abi, functionName, args });
-    const estimatedGas = await publicClient.estimateGas({
-      account: walletClient.account,
-      to: contractAddress,
-      data: encodedData,
-      value: /* BigInt(value) or undefined */,
-    });
-    ```
-5.  **Prepare & Send Transaction:** Construct the transaction request object including the estimated gas and send it using the `walletClient`:
-    ```typescript
-    const transactionRequest = {
-      account: walletClient.account,
-      to: contractAddress,
-      data: encodedData,
-      value: /* BigInt(value) or undefined */,
-      gas: estimatedGas,
-    };
-    const txHash = await walletClient.sendTransaction(transactionRequest);
-    ```
+    See `/packages/nextjs/app/page.tsx` for an example of displaying the connected address using `usePrivy`.
 
-This manual flow ensures that the transaction is initiated directly through the provider managed by Privy, bypassing potential inconsistencies in the Wagmi context state.
+This manual flow and direct use of Privy hooks ensure that interactions and displayed data correctly reflect the user's Privy session, bypassing potential inconsistencies in the Wagmi context state.
 
 ---
 

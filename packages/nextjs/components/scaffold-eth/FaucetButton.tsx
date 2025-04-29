@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { createWalletClient, http, parseEther } from "viem";
 import { hardhat } from "viem/chains";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { BanknotesIcon } from "@heroicons/react/24/outline";
 import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useWatchBalance } from "~~/hooks/scaffold-eth/useWatchBalance";
