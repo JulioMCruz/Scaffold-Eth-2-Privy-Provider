@@ -2,8 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { InheritanceTooltip } from "./InheritanceTooltip";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { Abi, AbiFunction } from "abitype";
-import { Address, TransactionReceipt } from "viem";
+import {
+  Address,
+  TransactionReceipt,
+  createPublicClient,
+  createWalletClient,
+  custom,
+  encodeFunctionData,
+  http,
+} from "viem";
 import { useAccount, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import {
   ContractInput,
@@ -14,7 +23,6 @@ import {
   transformAbiFunction,
 } from "~~/app/debug/_components/contract";
 import { IntegerInput } from "~~/components/scaffold-eth";
-import { useTransactor } from "~~/hooks/scaffold-eth";
 import { useTargetNetwork } from "~~/hooks/scaffold-eth/useTargetNetwork";
 
 type WriteOnlyFunctionFormProps = {
@@ -34,41 +42,106 @@ export const WriteOnlyFunctionForm = ({
 }: WriteOnlyFunctionFormProps) => {
   const [form, setForm] = useState<Record<string, any>>(() => getInitialFormState(abiFunction));
   const [txValue, setTxValue] = useState<string>("");
-  const { chain } = useAccount();
-  const writeTxn = useTransactor();
-  const { targetNetwork } = useTargetNetwork();
-  const writeDisabled = !chain || chain?.id !== targetNetwork.id;
 
-  const { data: result, isPending, writeContractAsync } = useWriteContract();
+  const { address: wagmiAddress, chain, isConnected: isWagmiConnected, status: wagmiStatus } = useAccount();
+
+  const { ready: privyReady, authenticated: isPrivyAuthenticated, user: privyUser } = usePrivy();
+  const { wallets } = useWallets();
+  const activeWallet = wallets?.[0];
+
+  const { targetNetwork } = useTargetNetwork();
+
+  useEffect(() => {
+    console.log("--- Debug State ---");
+    console.log("Wagmi:", { isWagmiConnected, wagmiStatus, wagmiAddress, chainId: chain?.id });
+    console.log("Privy:", {
+      privyReady,
+      isPrivyAuthenticated,
+      userAddress: privyUser?.wallet?.address,
+      activeWalletChainId: activeWallet?.chainId,
+    });
+    console.log("Target Network ID:", targetNetwork.id);
+    if (activeWallet) {
+      console.log("Inspecting Privy activeWallet:", activeWallet);
+    }
+  });
+
+  const privyChainIdNumber = activeWallet?.chainId ? parseInt(activeWallet.chainId.split(":")[1], 10) : undefined;
+  const isCorrectNetwork = activeWallet && privyChainIdNumber === targetNetwork.id;
+  const writeDisabled = !activeWallet || !isCorrectNetwork;
+  const [isPending, setIsPending] = useState(false);
+  const [result, setResult] = useState<string | undefined>();
 
   const handleWrite = async () => {
-    if (writeContractAsync) {
-      try {
-        const makeWriteWithParams = () =>
-          writeContractAsync({
-            address: contractAddress,
-            functionName: abiFunction.name,
-            abi: abi,
-            args: getParsedContractFunctionArgs(form),
-            value: BigInt(txValue),
-          });
-        await writeTxn(makeWriteWithParams);
-        onChange();
-      } catch (e: any) {
-        console.error("⚡️ ~ file: WriteOnlyFunctionForm.tsx:handleWrite ~ error", e);
-      }
+    if (!activeWallet || writeDisabled) return;
+
+    console.log(`handleWrite called for function: ${abiFunction.name}`);
+    setDisplayedTxResult(null);
+    setResult(undefined);
+    setIsPending(true);
+
+    try {
+      const provider = await activeWallet.getEthereumProvider();
+      const walletClient = createWalletClient({
+        account: activeWallet.address as Address,
+        transport: custom(provider),
+        chain: targetNetwork,
+      });
+
+      const publicClient = createPublicClient({
+        chain: targetNetwork,
+        transport: http(),
+      });
+
+      const functionArgs = getParsedContractFunctionArgs(form);
+      const encodedData = encodeFunctionData({
+        abi: abi,
+        functionName: abiFunction.name,
+        args: functionArgs,
+      });
+
+      const estimatedGas = await publicClient.estimateGas({
+        account: walletClient.account,
+        to: contractAddress,
+        data: encodedData,
+        value: txValue ? BigInt(txValue) : undefined,
+      });
+      console.log("Estimated Gas:", estimatedGas);
+
+      const transactionRequest = {
+        account: walletClient.account,
+        to: contractAddress,
+        data: encodedData,
+        value: txValue ? BigInt(txValue) : undefined,
+        gas: estimatedGas,
+      };
+
+      console.log("Sending transaction via Viem Client:", transactionRequest);
+      const txHash = await walletClient.sendTransaction(transactionRequest);
+      console.log("Transaction Hash:", txHash);
+
+      setResult(txHash);
+      setDisplayedTxResult(txHash);
+      onChange();
+    } catch (error) {
+      console.error("⚡️ Viem/Privy sendTransaction error:", error);
+      setDisplayedTxResult(`Transaction failed: ${(error as Error).message}`);
+    } finally {
+      setIsPending(false);
     }
   };
 
-  const [displayedTxResult, setDisplayedTxResult] = useState<TransactionReceipt>();
-  const { data: txResult } = useWaitForTransactionReceipt({
-    hash: result,
+  const [displayedTxResult, setDisplayedTxResult] = useState<TransactionReceipt | string | null>(null);
+
+  const { data: txReceiptFromWagmi } = useWaitForTransactionReceipt({
+    hash: result as `0x${string}` | undefined,
   });
   useEffect(() => {
-    setDisplayedTxResult(txResult);
-  }, [txResult]);
+    if (txReceiptFromWagmi) {
+      setDisplayedTxResult(txReceiptFromWagmi);
+    }
+  }, [txReceiptFromWagmi]);
 
-  // TODO use `useMemo` to optimize also update in ReadOnlyFunctionForm
   const transformedFunction = transformAbiFunction(abiFunction);
   const inputs = transformedFunction.inputs.map((input, inputIndex) => {
     const key = getFunctionInputKey(abiFunction.name, input, inputIndex);
@@ -76,7 +149,7 @@ export const WriteOnlyFunctionForm = ({
       <ContractInput
         key={key}
         setForm={updatedFormValue => {
-          setDisplayedTxResult(undefined);
+          setDisplayedTxResult(null);
           setForm(updatedFormValue);
         }}
         form={form}
@@ -104,7 +177,7 @@ export const WriteOnlyFunctionForm = ({
             <IntegerInput
               value={txValue}
               onChange={updatedTxValue => {
-                setDisplayedTxResult(undefined);
+                setDisplayedTxResult(null);
                 setTxValue(updatedTxValue);
               }}
               placeholder="value (wei)"
@@ -114,7 +187,11 @@ export const WriteOnlyFunctionForm = ({
         <div className="flex justify-between gap-2">
           {!zeroInputs && (
             <div className="flex-grow basis-0">
-              {displayedTxResult ? <TxReceipt txResult={displayedTxResult} /> : null}
+              {displayedTxResult && typeof displayedTxResult === "object" ? (
+                <TxReceipt txResult={displayedTxResult} />
+              ) : displayedTxResult ? (
+                <span className="text-xs">{displayedTxResult}</span>
+              ) : null}
             </div>
           )}
           <div
@@ -131,9 +208,13 @@ export const WriteOnlyFunctionForm = ({
           </div>
         </div>
       </div>
-      {zeroInputs && txResult ? (
+      {zeroInputs && displayedTxResult ? (
         <div className="flex-grow basis-0">
-          <TxReceipt txResult={txResult} />
+          {typeof displayedTxResult === "object" ? (
+            <TxReceipt txResult={displayedTxResult} />
+          ) : (
+            <span className="text-xs">{displayedTxResult}</span>
+          )}
         </div>
       ) : null}
     </div>
