@@ -59,7 +59,13 @@ export const HeaderMenuLinks = () => {
  */
 export const Header = () => {
   const { targetNetwork } = useTargetNetwork();
+
+  console.log("** targetNetwork:", targetNetwork.id);
+  console.log("** hardhat:", hardhat.id);
+
   const isLocalNetwork = targetNetwork.id === hardhat.id;
+
+  console.log("** isLocalNetwork:", isLocalNetwork);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const burgerMenuRef = useRef<HTMLDivElement>(null);
